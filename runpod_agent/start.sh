@@ -40,13 +40,18 @@ echo "Starting noVNC..."
 # 2. Start PulseAudio (Fake Audio)
 echo "Starting PulseAudio..."
 pulseaudio -D --exit-idle-time=-1
-# Create a virtual sink for Chrome to output audio potentially
-# Create a virtual sink for Chrome to output audio potentially
+# Create a virtual sink for Chrome to output audio potentiall
 pactl load-module module-null-sink sink_name=VirtualSink sink_properties=device.description=VirtualSink
 
 # Create Virtual Microphone for Text-to-Speech Input into Zoom
-pactl load-module module-null-sink sink_name=VirtualMic sink_properties=device.description=Virtual_Microphone
-pactl set-default-source VirtualMic.monitor
+# We use module-virtual-source which is cleaner than just monitoring a sink
+pactl load-module module-null-sink sink_name=VirtualMic sink_properties=device.description=Virtual_Microphone_Sink
+pactl load-module module-virtual-source source_name=VirtualMicSource master=VirtualMic.monitor source_properties=device.description=Virtual_Microphone_Input
+
+# Set Default Source to our Virtual Mic
+pactl set-default-source VirtualMicSource
+pactl set-source-mute VirtualMicSource 0
+pactl set-sink-mute VirtualMic 0
 
 # 3. Start Ollama Serve
 echo "Starting Ollama..."
