@@ -40,15 +40,15 @@ class VisionHelper:
             Based on the screenshot, choose the single best ACTION from this list:
             1. CLICK_LAUNCH (If you see 'Launch Meeting' button or 'Open Zoom Meetings' dialog)
             2. ENTER_NAME (If you see an input field for 'Your Name' and a 'Join' button)
-            3. SOLVE_CAPTCHA (If you see a CAPTCHA or 'I am not a robot')
-            4. WAIT (If the page is loading or blank)
-            5. SUCCESS (If you see the meeting interface with microphone/video icons)
+            3. CLICK_JOIN_AUDIO (If you see 'Join Audio', 'Join by Computer', or a microphone with a red slash)
+            4. SOLVE_CAPTCHA (If you see a CAPTCHA or 'I am not a robot')
+            5. END_SUCCESS (Only if you see the meeting interface AND the microphone is Unmuted/Green)
             
             Format: Check the image carefully. Return a JSON object:
             {{ 
                 "action": "ACTION_NAME", 
                 "reasoning": "Brief explanation of what you see",
-                "speak": "A short, natural sentence announcing what you are doing (e.g., 'I see the launch button, clicking it now.')"
+                "speak": "A short, natural sentence announcing what you are doing (e.g., 'I am joining audio now.')"
             }}
             """
 
@@ -78,6 +78,7 @@ class VisionHelper:
                     speak_fallback = "I am unsure, waiting."
                     if "LAUNCH" in result_text.upper(): return "CLICK_LAUNCH", result_text, "I see the launch button."
                     if "NAME" in result_text.upper(): return "ENTER_NAME", result_text, "I am entering the name."
+                    if "AUDIO" in result_text.upper(): return "CLICK_JOIN_AUDIO", result_text, "Joining audio."
                     if "CAPTCHA" in result_text.upper(): return "SOLVE_CAPTCHA", result_text, "There is a CAPTCHA."
                     return "WAIT", result_text, speak_fallback
             else:
@@ -87,46 +88,7 @@ class VisionHelper:
             logger.error(f"Vision Decision Failed: {e}")
             return "WAIT", str(e), "System failure."
 
-class ZoomBot:
-    def __init__(self):
-        self.driver = None
-        self.running = False
-
-    def start_browser(self):
-        logger.info("Starting Chrome HEADED (Xvfb)...")
-        opts = Options()
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--disable-gpu")
-        opts.add_argument("--use-fake-ui-for-media-stream")
-        opts.add_argument("--window-size=1920,1080")
-        opts.add_argument("--disable-extensions")
-        opts.add_argument("--disable-setuid-sandbox")
-        opts.add_argument("--disable-infobars")
-        opts.add_argument("--user-data-dir=/tmp/vision-session") 
-        opts.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-        try:
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=opts)
-            self.running = True
-            logger.info("Browser started.")
-        except Exception as e:
-            logger.error(f"Failed: {e}")
-            self.running = False
-
-    def speak(self, text):
-        """Synthesize text to speech and play it into the Virtual Mic."""
-        if not text: return
-        logger.info(f"🗣️ SPEAKING: {text}")
-        try:
-            tts = gTTS(text=text, lang='en')
-            tts.save("/tmp/speech.mp3")
-            # Play to PulseAudio (which is routed to VirtualMic via start.sh config)
-            # mpg123 is lightweight and robust
-            os.system("mpg123 -q /tmp/speech.mp3")
-        except Exception as e:
-            logger.error(f"TTS Failed: {e}")
+# ... (ZoomBot Class) ...
 
     def join_meeting(self, join_url: str, name: str):
         if not self.driver: self.start_browser()
@@ -145,13 +107,13 @@ class ZoomBot:
                     url += f"?pwd={pwd}"
                 self.driver.get(url)
             else:
-                 self.driver.get(join_url)
+                self.driver.get(join_url)
             
             logger.info("Page loaded. Entering Vision Loop...")
             
-            # Smart Loop: Retry up to 5 times or until SUCCESS
-            for i in range(5):
-                logger.info(f"--- Vision Cycle {i+1}/5 ---")
+            # Smart Loop: Retry up to 8 times or until SUCCESS
+            for i in range(8):
+                logger.info(f"--- Vision Cycle {i+1}/8 ---")
                 time.sleep(3) # Wait for render
                 
                 action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
@@ -164,14 +126,15 @@ class ZoomBot:
                     self.perform_click_launch()
                 elif action == "ENTER_NAME":
                     if self.perform_enter_name(name):
-                        self.speak("I have entered the name and clicked Join.")
-                        return True, "Joining (Name Entered)"
+                        self.speak("I have entering the name.")
+                elif action == "CLICK_JOIN_AUDIO":
+                    self.perform_join_audio()
                 elif action == "SOLVE_CAPTCHA":
                     self.speak("I see a CAPTCHA. Please help me.")
                     return True, "Blocked by CAPTCHA (Check VNC)"
-                elif action == "SUCCESS":
-                    self.speak("I am in the meeting.")
-                    return True, "Already in Meeting"
+                elif action == "END_SUCCESS":
+                    self.speak("I am in the meeting and audio is active.")
+                    return True, "Success (In Meeting)"
                 elif action == "WAIT":
                     logger.info("Waiting for page change...")
                     continue
@@ -184,71 +147,30 @@ class ZoomBot:
             logger.error(f"Error: {e}")
             self.speak("I encountered an error joining the meeting.")
             return False, str(e)
-
-    def perform_click_launch(self):
-        logger.info("Executing CLICK_LAUNCH...")
+            
+    def perform_join_audio(self):
+        logger.info("Executing CLICK_JOIN_AUDIO...")
         try:
-            # Try JS Click on common buttons
             self.driver.execute_script("""
-                var buttons = document.querySelectorAll('button, a');
+                // 1. Check for 'Join Audio by Computer' (Blue Button)
+                var buttons = document.querySelectorAll('button');
                 for (var i = 0; i < buttons.length; i++) {
                     var text = buttons[i].innerText.toLowerCase();
-                    if (text.includes('launch meeting') || text.includes('join from your browser')) {
+                    if (text.includes('join audio by computer') || text.includes('join audio')) {
                         buttons[i].click();
+                        console.log('Clicked Join Audio');
                         return;
                     }
                 }
+                
+                // 2. Check for Unmute Icon (if muted)
+                var muteBtn = document.querySelector('button[aria-label="unmute"]'); 
+                if (muteBtn) {
+                     muteBtn.click();
+                     console.log('Clicked Unmute');
+                }
             """)
-            # Backup: Class name
-            try:
-                self.driver.find_element(By.CLASS_NAME, "launch-meeting-btn").click()
-            except: pass
         except Exception as e:
-            logger.error(f"Click Launch Failed: {e}")
+            logger.error(f"Join Audio Failed: {e}")
 
-    def perform_enter_name(self, name):
-        logger.info(f"Executing ENTER_NAME with '{name}'...")
-        try:
-            # Try specific ID first
-            try:
-                inp = self.driver.find_element(By.ID, "inputname")
-                inp.clear()
-                inp.send_keys(name)
-            except:
-                # Fallback: Find visible text input
-                inputs = self.driver.find_elements(By.TAG_NAME, "input")
-                for i in inputs:
-                    if i.is_displayed() and i.get_attribute("type") in ["text"]:
-                        i.clear()
-                        i.send_keys(name)
-                        break
-            
-            # Click Join
-            try:
-                self.driver.find_element(By.ID, "joinBtn").click()
-            except:
-                # Fallback: Find button with "Join" text
-                self.driver.execute_script("""
-                    var buttons = document.querySelectorAll('button');
-                    for (var i = 0; i < buttons.length; i++) {
-                        if (buttons[i].innerText.toLowerCase() === 'join') {
-                            buttons[i].click();
-                            return;
-                        }
-                    }
-                """)
-            return True
-        except Exception as e:
-            logger.error(f"Enter Name Failed: {e}")
-            return False
-
-    def leave_meeting(self):
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
-            self.running = False
-
-    def get_status(self):
-        return {"running": self.running}
-
-bot_instance = ZoomBot()
+    # ... (Rest of ZoomBot methods) ...
