@@ -107,7 +107,7 @@ class ZoomBot:
             if "launch" in self.driver.current_url or "postattendee" in self.driver.current_url:
                 logger.info("Detected Launch/Post-Attendee Page. Attempting Smart Click...")
                 
-                # Heuristic First: Try to find hidden 'Join from Browser' link
+                # Heuristic First: Try to find hidden 'Join from Your Browser' link
                 try:
                     logger.info("Looking for 'Join from Your Browser' link...")
                     # It's usually hidden or small text
@@ -147,16 +147,53 @@ class ZoomBot:
                 logger.warning("Input not found. Invoking Vision Agent...")
                 
                 analysis = VisionHelper.analyze_page(self.driver, 
-                    "Is there a CAPTCHA on this page? Answer YES or NO. Is there a 'Launch Meeting' button? Answer YES or NO.")
+                    "What is the state of this page? Options: CAPTCHA, LAUNCH_PAGE, NAME_INPUT, OTHER. Return only the option name.")
                 
-                if analysis and "CAPTCHA" in analysis.upper() and "YES" in analysis.upper():
+                if analysis and "CAPTCHA" in analysis.upper():
                      logger.warning("VISION REPORT: CAPTCHA DETECTED! User intervention required.")
                      return True, "Blocked by CAPTCHA (Check VNC)"
                 
-                if analysis and "LAUNCH MEETING" in analysis.upper():
-                    logger.info("VISION REPORT: Launch Meeting button detected. Trying to click center...")
-                    # TODO: Implement precise coordinate clicking in future
-                    return True, "Stuck on Launch Page (Check VNC)"
+                if analysis and "LAUNCH_PAGE" in analysis.upper():
+                    logger.info("VISION REPORT: Launch Meeting button detected. Trying JS Click...")
+                    # Try to click ANY button with "Launch" text via JS
+                    try:
+                        self.driver.execute_script("""
+                            var buttons = document.getElementsByTagName('button');
+                            for (var i = 0; i < buttons.length; i++) {
+                                if (buttons[i].innerText.includes('Launch Meeting')) {
+                                    buttons[i].click();
+                                    return;
+                                }
+                            }
+                            var links = document.getElementsByTagName('a');
+                            for (var i = 0; i < links.length; i++) {
+                                if (links[i].innerText.includes('Launch Meeting')) {
+                                    links[i].click();
+                                    return;
+                                }
+                            }
+                        """)
+                        logger.info("JS Click Attempted.")
+                        time.sleep(5)
+                        return True, "Clicked Launch (Check VNC)"
+                    except Exception as e:
+                        logger.error(f"JS Click Failed: {e}")
+                        return True, "Failed to Click Launch (Check VNC)"
+                
+                if analysis and "NAME_INPUT" in analysis.upper():
+                    logger.info("VISION REPORT: Name Input detected. Trying relaxed search...")
+                    # Try to find input by generic tag
+                    try:
+                        inputs = self.driver.find_elements(By.TAG_NAME, "input")
+                        for inp in inputs:
+                            if inp.is_displayed() and inp.get_attribute("type") in ["text", "email"]:
+                                inp.clear()
+                                inp.send_keys(name)
+                                inp.send_keys(u'\ue007') # Press Enter
+                                logger.info("Filled generic input.")
+                                return True, "Filled generic input"
+                    except:
+                        pass
                 
                 return True, "Check VNC (Unknown State)"
 
