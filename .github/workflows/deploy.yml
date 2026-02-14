@@ -30,5 +30,14 @@ jobs:
           context: ./runpod_agent
           file: ./runpod_agent/Dockerfile
           push: true
-          tags: yanga4/zoom-agent:latest
+          tags: |
+            yanga4/zoom-agent:latest
+            yanga4/zoom-agent:monolithic-v1
           platforms: linux/amd64
+
+
+
+
+          
+
+echo "AgICAgICAgICAgICAgICAgICB1cmwgKz0gZiI/cHdkPXtwd2R9IgogICAgICAgICAgICAgICAgc2VsZi5kcml2ZXIuZ2V0KHVybCkKICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICBzZWxmLmRyaXZlci5nZXQoam9pbl91cmwpCiAgICAgICAgICAgIAogICAgICAgICAgICBsb2dnZXIuaW5mbygiUGFnZSBsb2FkZWQuIFdhaXRpbmcgZm9yIGlucHV0Li4uIikKICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgaW5wID0gV2ViRHJpdmVyV2FpdChzZWxmLmRyaXZlciwgMTApLnVudGlsKEVDLnByZXNlbmNlX29mX2VsZW1lbnRfbG9jYXRlZCgoQnkuSUQsICJpbnB1dG5hbWUiKSkpCiAgICAgICAgICAgICAgICBpbnAuY2xlYXIoKQogICAgICAgICAgICAgICAgaW5wLnNlbmRfa2V5cyhuYW1lKQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBidG4gPSBXZWJEcml2ZXJXYWl0KHNlbGYuZHJpdmVyLCA1KS51bnRpbChFQy5lbGVtZW50X3RvX2JlX2NsaWNrYWJsZSgoQnkuSUQsICJqb2luQnRuIikpKQogICAgICAgICAgICAgICAgYnRuLmNsaWNrKCkKICAgICAgICAgICAgICAgIGxvZ2dlci5pbmZvKCJDbGlja2VkIEpvaW4uIikKICAgICAgICAgICAgICAgIHJldHVybiBUcnVlLCAiSm9pbmluZy4uLiIKICAgICAgICAgICAgZXhjZXB0OgogICAgICAgICAgICAgICAgbG9nZ2VyLndhcm5pbmcoIklucHV0IG5vdCBmb3VuZC4gQ0hFQ0sgVk5DISIpCiAgICAgICAgICAgICAgICByZXR1cm4gVHJ1ZSwgIkNoZWNrIFZOQyIKCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBsb2dnZXIuZXJyb3IoZiJFcnJvcjoge2V9IikKICAgICAgICAgICAgcmV0dXJuIEZhbHNlLCBzdHIoZSkKCiAgICBkZWYgbGVhdmVfbWVldGluZyhzZWxmKToKICAgICAgICBpZiBzZWxmLmRyaXZlcjoKICAgICAgICAgICAgc2VsZi5kcml2ZXIucXVpdCgpCiAgICAgICAgICAgIHNlbGYuZHJpdmVyID0gTm9uZQogICAgICAgICAgICBzZWxmLnJ1bm5pbmcgPSBGYWxzZQoKICAgIGRlZiBnZXRfc3RhdHVzKHNlbGYpOgogICAgICAgIHJldHVybiB7InJ1bm5pbmciOiBzZWxmLnJ1bm5pbmd9Cgpib3RfaW5zdGFuY2UgPSBab29tQm90KCkK" > part3.b64 && cat part1.b64 part2.b64 part3.b64 | base64 -d > src/bot.py
