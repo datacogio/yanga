@@ -41,7 +41,7 @@ done
 echo "Ollama is UP."
 
 # Auto-Model Pull (Mistral by default)
-MODEL_NAME="mistral"
+MODEL_NAME="llama3.2-vision"
 if ! ollama list | grep -q "$MODEL_NAME"; then
     echo "Pulling model: $MODEL_NAME..."
     ollama pull $MODEL_NAME
