@@ -1,11 +1,10 @@
 fastapi>=0.100.0
 uvicorn
 selenium
-requests==2.31.0
-urllib3<2.0
-# Scientific Stack (Pin versions to avoid resolver backtracking)
-numpy<2.0
-scipy<1.11.0
+# Scientific Stack (Strict Pins to stop resolver backtracking)
+numpy==1.26.4
+scipy==1.12.0
+sentence-transformers==2.7.0
 pydantic>=2.4.0
 python-multipart
 # Chrome driver management is handled by installing matching packages or manual drift manage

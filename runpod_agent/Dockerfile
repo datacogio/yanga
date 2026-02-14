@@ -79,6 +79,9 @@ RUN curl -fsSL https://ollama.com/install.sh | sh
 # OPTIMIZATION: Install PyTorch CPU first to speed up build (avoiding 700MB GPU version)
 RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
+# OPTIMIZATION: Install Scientific Stack first (Strict Pins)
+RUN pip3 install --no-cache-dir numpy==1.26.4 scipy==1.12.0
+
 # We'll copy requirements.txt first to leverage Docker cache
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
