@@ -22,36 +22,59 @@ VISION_MODEL = "llama3.2-vision"
 
 class VisionHelper:
     @staticmethod
-    def analyze_page(driver, prompt="Describe the main button or action on this page."):
+    def decide_action(driver, name, join_url):
         """
-        Takes a screenshot, sends it to Ollama Vision, and returns the analysis.
+        Sends current screenshot to Vision model and gets the next action instruction.
+        Returns: Tuple(ACTION_TYPE, REASONING)
         """
         try:
-            # 1. Capture Screenshot as Base64
             screenshot_b64 = driver.get_screenshot_as_base64()
             
-            # 2. Construct Payload
+            prompt = f"""
+            Identify the current state of this Zoom Meeting Join flow.
+            Goal: Join the meeting with name '{name}'.
+            URL: {join_url}
+            
+            Based on the screenshot, choose the single best ACTION from this list:
+            1. CLICK_LAUNCH (If you see 'Launch Meeting' button or 'Open Zoom Meetings' dialog)
+            2. ENTER_NAME (If you see an input field for 'Your Name' and a 'Join' button)
+            3. SOLVE_CAPTCHA (If you see a CAPTCHA or 'I am not a robot')
+            4. WAIT (If the page is loading or blank)
+            5. SUCCESS (If you see the meeting interface with microphone/video icons)
+            
+            Format: Check the image carefully. Return a JSON object:
+            {{ "action": "ACTION_NAME", "reasoning": "Brief explanation of what you see" }}
+            """
+
             payload = {
                 "model": VISION_MODEL,
                 "prompt": prompt,
                 "stream": False,
-                "images": [screenshot_b64]
+                "images": [screenshot_b64],
+                "format": "json" 
             }
             
-            # 3. Send to Ollama
-            logger.info("Sending screenshot to Vision Model...")
-            response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+            logger.info("Thinking... (Sending screenshot to Vision Model)")
+            response = requests.post(OLLAMA_URL, json=payload, timeout=45)
             
             if response.status_code == 200:
-                result = response.json().get("response", "").strip()
-                logger.info(f"Vision Analysis: {result}")
-                return result
+                result_text = response.json().get("response", "").strip()
+                logger.info(f"Model Response: {result_text}")
+                try:
+                    data = json.loads(result_text)
+                    return data.get("action", "WAIT"), data.get("reasoning", "No reasoning provided")
+                except:
+                    # Fallback if model outputs plain text
+                    if "LAUNCH" in result_text.upper(): return "CLICK_LAUNCH", result_text
+                    if "NAME" in result_text.upper(): return "ENTER_NAME", result_text
+                    if "CAPTCHA" in result_text.upper(): return "SOLVE_CAPTCHA", result_text
+                    return "WAIT", result_text
             else:
                 logger.error(f"Ollama Error: {response.text}")
-                return None
+                return "WAIT", "Model Error"
         except Exception as e:
-            logger.error(f"Vision Helper Failed: {e}")
-            return None
+            logger.error(f"Vision Decision Failed: {e}")
+            return "WAIT", str(e)
 
 class ZoomBot:
     def __init__(self):
@@ -87,11 +110,10 @@ class ZoomBot:
 
         try:
             logger.info(f"Navigating: {join_url}")
-            
-            # Smart URL Handling (Force Web Client if possible)
-            if "/j/" in join_url:
+            # Try efficient URL first
+            if "/j/" in join_url and "wc" not in join_url:
                 mid = join_url.split("/j/")[1].split("?")[0]
-                url = f"https://zoom.us/wc/{mid}/join" # Try direct WC link first
+                url = f"https://zoom.us/wc/{mid}/join" 
                 if "pwd=" in join_url:
                     pwd = join_url.split("pwd=")[1].split("&")[0]
                     url += f"?pwd={pwd}"
@@ -99,107 +121,93 @@ class ZoomBot:
             else:
                  self.driver.get(join_url)
             
-            logger.info("Page loaded. Checking State...")
-            time.sleep(5) # Wait for redirects/rendering
+            logger.info("Page loaded. Entering Vision Loop...")
             
-            # --- VISION LOGIC START ---
-            # 1. Check for "Launch Meeting" Landing Page
-            if "launch" in self.driver.current_url or "postattendee" in self.driver.current_url:
-                logger.info("Detected Launch/Post-Attendee Page. Attempting Smart Click...")
+            # Smart Loop: Retry up to 5 times or until SUCCESS
+            for i in range(5):
+                logger.info(f"--- Vision Cycle {i+1}/5 ---")
+                time.sleep(3) # Wait for render
                 
-                # Heuristic First: Try to find hidden 'Join from Your Browser' link
-                try:
-                    logger.info("Looking for 'Join from Your Browser' link...")
-                    # It's usually hidden or small text
-                    links = self.driver.find_elements(By.TAG_NAME, "a")
-                    for link in links:
-                        if "browser" in link.text.lower() or "join" in link.text.lower():
-                            logger.info(f"Clicking link: {link.text}")
-                            link.click()
-                            time.sleep(5)
-                            break
-                except:
-                    pass
+                action, reasoning = VisionHelper.decide_action(self.driver, name, join_url)
+                logger.info(f"DECISION: {action} | REASON: {reasoning}")
+                
+                if action == "CLICK_LAUNCH":
+                    self.perform_click_launch()
+                elif action == "ENTER_NAME":
+                    if self.perform_enter_name(name):
+                        return True, "Joining (Name Entered)"
+                elif action == "SOLVE_CAPTCHA":
+                    return True, "Blocked by CAPTCHA (Check VNC)"
+                elif action == "SUCCESS":
+                    return True, "Already in Meeting"
+                elif action == "WAIT":
+                    logger.info("Waiting for page change...")
+                    continue
+                
+                time.sleep(2)
 
-                # Fallback to Vision if still stuck
-                # But for now, we assume the direct link usually works or we need to click "Launch Meeting"
-                try:
-                    launch_btn = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.CLASS_NAME, "launch-meeting-btn"))
-                    )
-                    launch_btn.click()
-                except:
-                    pass
-            
-            # 2. Check for "Name Input" (Success State)
-            logger.info("Checking for Name Input...")
-            try:
-                inp = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "inputname")))
-                inp.clear()
-                inp.send_keys(name)
-                
-                btn = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.ID, "joinBtn")))
-                btn.click()
-                logger.info("Clicked Join.")
-                return True, "Joining..."
-            except:
-                # If we are here, we are stuck. Time for Vision Analysis.
-                logger.warning("Input not found. Invoking Vision Agent...")
-                
-                analysis = VisionHelper.analyze_page(self.driver, 
-                    "What is the state of this page? Options: CAPTCHA, LAUNCH_PAGE, NAME_INPUT, OTHER. Return only the option name.")
-                
-                if analysis and "CAPTCHA" in analysis.upper():
-                     logger.warning("VISION REPORT: CAPTCHA DETECTED! User intervention required.")
-                     return True, "Blocked by CAPTCHA (Check VNC)"
-                
-                if analysis and "LAUNCH_PAGE" in analysis.upper():
-                    logger.info("VISION REPORT: Launch Meeting button detected. Trying JS Click...")
-                    # Try to click ANY button with "Launch" text via JS
-                    try:
-                        self.driver.execute_script("""
-                            var buttons = document.getElementsByTagName('button');
-                            for (var i = 0; i < buttons.length; i++) {
-                                if (buttons[i].innerText.includes('Launch Meeting')) {
-                                    buttons[i].click();
-                                    return;
-                                }
-                            }
-                            var links = document.getElementsByTagName('a');
-                            for (var i = 0; i < links.length; i++) {
-                                if (links[i].innerText.includes('Launch Meeting')) {
-                                    links[i].click();
-                                    return;
-                                }
-                            }
-                        """)
-                        logger.info("JS Click Attempted.")
-                        time.sleep(5)
-                        return True, "Clicked Launch (Check VNC)"
-                    except Exception as e:
-                        logger.error(f"JS Click Failed: {e}")
-                        return True, "Failed to Click Launch (Check VNC)"
-                
-                if analysis and "NAME_INPUT" in analysis.upper():
-                    logger.info("VISION REPORT: Name Input detected. Trying relaxed search...")
-                    # Try to find input by generic tag
-                    try:
-                        inputs = self.driver.find_elements(By.TAG_NAME, "input")
-                        for inp in inputs:
-                            if inp.is_displayed() and inp.get_attribute("type") in ["text", "email"]:
-                                inp.clear()
-                                inp.send_keys(name)
-                                inp.send_keys(u'\ue007') # Press Enter
-                                logger.info("Filled generic input.")
-                                return True, "Filled generic input"
-                    except:
-                        pass
-                
-                return True, "Check VNC (Unknown State)"
+            return True, "Loop Finished (Check VNC)"
 
         except Exception as e:
             logger.error(f"Error: {e}")
             return False, str(e)
+
+    def perform_click_launch(self):
+        logger.info("Executing CLICK_LAUNCH...")
+        try:
+            # Try JS Click on common buttons
+            self.driver.execute_script("""
+                var buttons = document.querySelectorAll('button, a');
+                for (var i = 0; i < buttons.length; i++) {
+                    var text = buttons[i].innerText.toLowerCase();
+                    if (text.includes('launch meeting') || text.includes('join from your browser')) {
+                        buttons[i].click();
+                        return;
+                    }
+                }
+            """)
+            # Backup: Class name
+            try:
+                self.driver.find_element(By.CLASS_NAME, "launch-meeting-btn").click()
+            except: pass
+        except Exception as e:
+            logger.error(f"Click Launch Failed: {e}")
+
+    def perform_enter_name(self, name):
+        logger.info(f"Executing ENTER_NAME with '{name}'...")
+        try:
+            # Try specific ID first
+            try:
+                inp = self.driver.find_element(By.ID, "inputname")
+                inp.clear()
+                inp.send_keys(name)
+            except:
+                # Fallback: Find visible text input
+                inputs = self.driver.find_elements(By.TAG_NAME, "input")
+                for i in inputs:
+                    if i.is_displayed() and i.get_attribute("type") in ["text"]:
+                        i.clear()
+                        i.send_keys(name)
+                        break
+            
+            # Click Join
+            try:
+                self.driver.find_element(By.ID, "joinBtn").click()
+            except:
+                # Fallback: Find button with "Join" text
+                self.driver.execute_script("""
+                    var buttons = document.querySelectorAll('button');
+                    for (var i = 0; i < buttons.length; i++) {
+                        if (buttons[i].innerText.toLowerCase() === 'join') {
+                            buttons[i].click();
+                            return;
+                        }
+                    }
+                """)
+            return True
+        except Exception as e:
+            logger.error(f"Enter Name Failed: {e}")
+            return False
 
     def leave_meeting(self):
         if self.driver:
