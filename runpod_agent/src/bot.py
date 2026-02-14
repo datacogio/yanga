@@ -16,6 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 
+# Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ZoomBot")
 
@@ -88,7 +89,45 @@ class VisionHelper:
             logger.error(f"Vision Decision Failed: {e}")
             return "WAIT", str(e), "System failure."
 
-# ... (ZoomBot Class) ...
+class ZoomBot:
+    def __init__(self):
+        self.driver = None
+        self.status = "IDLE"
+
+    def start_browser(self):
+        """Initializes the Selenium Chrome Driver with Audio support."""
+        logger.info("Starting Chrome Browser...")
+        options = Options()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--use-fake-ui-for-media-stream") # Auto-allow mic/cam
+        options.add_argument("--window-size=1280,720")
+        
+        # Audio Flags
+        options.add_argument("--autoplay-policy=no-user-gesture-required")
+        
+        try:
+            self.driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=options
+            )
+            self.status = "BROWSER_READY"
+            logger.info("Chrome Started Successfully.")
+        except Exception as e:
+            logger.error(f"Failed to start Chrome: {e}")
+            self.status = "ERROR"
+
+    def speak(self, text):
+        """Uses gTTS to generate speech and plays it via mpg123 into the Virtual Mic."""
+        try:
+            logger.info(f"Speaking: {text}")
+            tts = gTTS(text=text, lang='en')
+            # Save to shared volume or tmp
+            tts.save("/tmp/speech.mp3")
+            # Play using mpg123 to default sink (which loops to VirtualMic)
+            os.system("mpg123 /tmp/speech.mp3")
+        except Exception as e:
+            logger.error(f"TTS Error: {e}")
 
     def join_meeting(self, join_url: str, name: str):
         if not self.driver: self.start_browser()
@@ -100,20 +139,23 @@ class VisionHelper:
             
             # Try efficient URL first
             if "/j/" in join_url and "wc" not in join_url:
-                mid = join_url.split("/j/")[1].split("?")[0]
-                url = f"https://zoom.us/wc/{mid}/join" 
-                if "pwd=" in join_url:
-                    pwd = join_url.split("pwd=")[1].split("&")[0]
-                    url += f"?pwd={pwd}"
-                self.driver.get(url)
+                try:
+                    mid = join_url.split("/j/")[1].split("?")[0]
+                    url = f"https://zoom.us/wc/{mid}/join" 
+                    if "pwd=" in join_url:
+                        pwd = join_url.split("pwd=")[1].split("&")[0]
+                        url += f"?pwd={pwd}"
+                    self.driver.get(url)
+                except:
+                    self.driver.get(join_url)
             else:
                 self.driver.get(join_url)
             
             logger.info("Page loaded. Entering Vision Loop...")
             
             # Smart Loop: Retry up to 8 times or until SUCCESS
-            for i in range(8):
-                logger.info(f"--- Vision Cycle {i+1}/8 ---")
+            for i in range(12):
+                logger.info(f"--- Vision Cycle {i+1}/12 ---")
                 time.sleep(3) # Wait for render
                 
                 action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
@@ -173,4 +215,50 @@ class VisionHelper:
         except Exception as e:
             logger.error(f"Join Audio Failed: {e}")
 
-    # ... (Rest of ZoomBot methods) ...
+    def perform_click_launch(self):
+        logger.info("Executing CLICK_LAUNCH...")
+        try:
+            self.driver.execute_script("""
+                var buttons = document.querySelectorAll('a, button');
+                for (var i = 0; i < buttons.length; i++) {
+                    if (buttons[i].innerText.includes('Launch Meeting') || buttons[i].innerText.includes('Join from Your Browser')) {
+                         buttons[i].click();
+                         return;
+                    }
+                }
+            """)
+        except Exception as e:
+            logger.error(f"Click Launch Failed: {e}")
+
+    def perform_enter_name(self, name):
+        logger.info(f"Executing ENTER_NAME: {name}...")
+        try:
+            self.driver.execute_script(f"""
+                var input = document.querySelector('input[type="text"]');
+                if (input) {{
+                    input.value = "{name}";
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                }}
+                
+                setTimeout(() => {{
+                    var joinBtn = document.querySelector('button.preview-join-button');
+                    if (joinBtn) joinBtn.click();
+                }}, 1000);
+            """)
+            return True
+        except Exception as e:
+            logger.error(f"Enter Name Failed: {e}")
+            return False
+
+    def leave_meeting(self):
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
+            self.status = "IDLE"
+            logger.info("Browser Closed.")
+
+    def get_status(self):
+        return {"status": self.status}
+
+# Instantiate Global Bot
+bot_instance = ZoomBot()
