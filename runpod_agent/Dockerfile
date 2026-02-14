@@ -46,6 +46,8 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     ffmpeg \
     mpg123 \
     dbus-x11 \
+    portaudio19-dev \
+    python3-pyaudio \
     && rm -rf /var/lib/apt/lists/*
 
 RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \

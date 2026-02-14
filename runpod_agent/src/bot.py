@@ -6,6 +6,8 @@ import json
 import time
 import os
 from gtts import gTTS
+import speech_recognition as sr
+import threading
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -22,6 +24,7 @@ logger = logging.getLogger("ZoomBot")
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 VISION_MODEL = "llama3.2-vision"
+CHAT_MODEL = "llama3.2-vision" # Using same model or 'llama3' for chat
 
 class VisionHelper:
     @staticmethod
@@ -43,7 +46,8 @@ class VisionHelper:
             2. ENTER_NAME (If you see an input field for 'Your Name' and a 'Join' button)
             3. CLICK_JOIN_AUDIO (If you see 'Join Audio', 'Join by Computer', or a microphone with a red slash)
             4. SOLVE_CAPTCHA (If you see a CAPTCHA or 'I am not a robot')
-            5. END_SUCCESS (Only if you see the meeting interface AND the microphone is Unmuted/Green)
+            5. MEETING_ENDED (If you see 'The meeting has ended', 'Host has ended the meeting', or 'Thank you for attending')
+            6. END_SUCCESS (Only if you see the meeting interface AND the microphone is Unmuted/Green/Active. If audio popup is visible, choose CLICK_JOIN_AUDIO)
             
             Format: Check the image carefully. Return a JSON object:
             {{ 
@@ -61,12 +65,12 @@ class VisionHelper:
                 "format": "json" 
             }
             
-            logger.info("Thinking... (Sending screenshot to Vision Model)")
+            # logger.info("Thinking... (Sending screenshot to Vision Model)")
             response = requests.post(OLLAMA_URL, json=payload, timeout=45)
             
             if response.status_code == 200:
                 result_text = response.json().get("response", "").strip()
-                logger.info(f"Model Response: {result_text}")
+                # logger.info(f"Model Response: {result_text}")
                 try:
                     data = json.loads(result_text)
                     return (
@@ -81,6 +85,7 @@ class VisionHelper:
                     if "NAME" in result_text.upper(): return "ENTER_NAME", result_text, "I am entering the name."
                     if "AUDIO" in result_text.upper(): return "CLICK_JOIN_AUDIO", result_text, "Joining audio."
                     if "CAPTCHA" in result_text.upper(): return "SOLVE_CAPTCHA", result_text, "There is a CAPTCHA."
+                    if "ENDED" in result_text.upper(): return "MEETING_ENDED", result_text, "The meeting has ended."
                     return "WAIT", result_text, speak_fallback
             else:
                 logger.error(f"Ollama Error: {response.text}")
@@ -93,6 +98,8 @@ class ZoomBot:
     def __init__(self):
         self.driver = None
         self.status = "IDLE"
+        self.recognizer = sr.Recognizer()
+        self.is_listening = False
 
     def start_browser(self):
         """Initializes the Selenium Chrome Driver with Audio support."""
@@ -122,12 +129,73 @@ class ZoomBot:
         try:
             logger.info(f"Speaking: {text}")
             tts = gTTS(text=text, lang='en')
-            # Save to shared volume or tmp
             tts.save("/tmp/speech.mp3")
-            # Play using mpg123 to default sink (which loops to VirtualMic)
-            os.system("mpg123 /tmp/speech.mp3")
+            os.system("mpg123 -q /tmp/speech.mp3") # -q for quiet logs
         except Exception as e:
             logger.error(f"TTS Error: {e}")
+
+    def listen(self):
+        """Listens for audio input via PulseAudio Virtual Source."""
+        try:
+            with sr.Microphone() as source:
+                logger.info("Listening...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                
+                try:
+                    # Using Google STT for lightweight speed (Whisper is better but heavier)
+                    text = self.recognizer.recognize_google(audio)
+                    logger.info(f"Heard: {text}")
+                    return text
+                except sr.UnknownValueError:
+                    return None
+                except sr.RequestError as e:
+                    logger.error(f"STT Error: {e}")
+                    return None
+        except Exception as e:
+            # logger.error(f"Mic Error: {e}")
+            return None
+
+    def start_conversation_loop(self):
+        """Main listening loop once in the meeting."""
+        self.is_listening = True
+        logger.info("--- Starting Conversation Loop ---")
+        self.speak("I am now listening.")
+        
+        while self.is_listening:
+            # 1. Listen
+            user_input = self.listen()
+            
+            if user_input:
+                # 2. Think (LLM)
+                response_text = self.ask_llm(user_input)
+                
+                # 3. Speak
+                if response_text:
+                    self.speak(response_text)
+            
+            # Check if meeting ended (Quick vision check every 10s)
+            # (Simplified for now to keep loop tight)
+            
+            # Check status flag
+            if self.status != "IN_MEETING":
+                break
+
+    def ask_llm(self, text):
+        """Sends text to Ollama for a chat response."""
+        prompt = f"You are a helpful AI assistant in a Zoom meeting. User said: '{text}'. Respond briefly and naturally."
+        payload = {
+            "model": CHAT_MODEL,
+            "prompt": prompt,
+            "stream": False
+        }
+        try:
+            resp = requests.post(OLLAMA_URL, json=payload, timeout=20)
+            if resp.status_code == 200:
+                return resp.json().get("response", "").strip()
+        except Exception as e:
+            logger.error(f"LLM Error: {e}")
+        return "I didn't quite catch that."
 
     def join_meeting(self, join_url: str, name: str):
         if not self.driver: self.start_browser()
@@ -153,37 +221,48 @@ class ZoomBot:
             
             logger.info("Page loaded. Entering Vision Loop...")
             
-            # Smart Loop: Retry up to 8 times or until SUCCESS
-            for i in range(12):
-                logger.info(f"--- Vision Cycle {i+1}/12 ---")
-                time.sleep(3) # Wait for render
+            # Smart Loop: Retry up to 15 times
+            success = False
+            for i in range(15):
+                logger.info(f"--- Vision Cycle {i+1}/15 ---")
                 
                 action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
                 logger.info(f"DECISION: {action} | REASON: {reasoning}")
                 
-                # Speak the model's thought process
                 if speech: self.speak(speech)
                 
                 if action == "CLICK_LAUNCH":
                     self.perform_click_launch()
                 elif action == "ENTER_NAME":
                     if self.perform_enter_name(name):
-                        self.speak("I have entering the name.")
+                        pass # Spoken by helper
                 elif action == "CLICK_JOIN_AUDIO":
                     self.perform_join_audio()
                 elif action == "SOLVE_CAPTCHA":
-                    self.speak("I see a CAPTCHA. Please help me.")
-                    return True, "Blocked by CAPTCHA (Check VNC)"
+                    logger.warning("CAPTCHA Detected! Attempting to wait/retry instead of quitting.")
+                    time.sleep(5)
+                elif action == "MEETING_ENDED":
+                    self.speak("The meeting has ended. Goodbye.")
+                    self.leave_meeting()
+                    return True, "Meeting Ended"
                 elif action == "END_SUCCESS":
-                    self.speak("I am in the meeting and audio is active.")
-                    return True, "Success (In Meeting)"
+                    self.speak("I am connected.")
+                    self.status = "IN_MEETING"
+                    success = True
+                    break # Exit Vision Loop, Enter Chat Loop
                 elif action == "WAIT":
-                    logger.info("Waiting for page change...")
-                    continue
+                    pass
                 
-                time.sleep(2)
+                time.sleep(3)
 
-            return True, "Loop Finished (Check VNC)"
+            if success:
+                # Start Conversation Thread (Non-blocking if we want API to return)
+                # But for now, we run it blocking or in bg.
+                # Let's run it in a thread so the API returns "Success"
+                threading.Thread(target=self.start_conversation_loop, daemon=True).start()
+                return True, "Joined & Listening"
+            else:
+                return False, "Timed out trying to join."
 
         except Exception as e:
             logger.error(f"Error: {e}")
@@ -233,20 +312,15 @@ class ZoomBot:
     def perform_enter_name(self, name):
         logger.info(f"Executing ENTER_NAME: {name}...")
         try:
-            # Locate Input Field
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="text"]'))
             )
             input_field = self.driver.find_element(By.CSS_SELECTOR, 'input[type="text"]')
-            
-            # Clear and Send Keys (Simulates real typing to trigger React/Vue events)
             input_field.clear()
             input_field.send_keys(name)
-            time.sleep(1) # Let UI update
+            time.sleep(1)
             
-            # Locate and Click Join Button
             join_btn = self.driver.find_element(By.CSS_SELECTOR, 'button.preview-join-button')
-            # Check if enabled
             if join_btn.is_enabled():
                 join_btn.click()
                 logger.info("Clicked Join Button")
@@ -254,12 +328,12 @@ class ZoomBot:
             else:
                 logger.warning("Join Button is still disabled!")
                 return False
-                
         except Exception as e:
             logger.error(f"Enter Name Failed: {e}")
             return False
 
     def leave_meeting(self):
+        self.is_listening = False # Stop loop
         if self.driver:
             self.driver.quit()
             self.driver = None
@@ -267,7 +341,7 @@ class ZoomBot:
             logger.info("Browser Closed.")
 
     def get_status(self):
-        return {"status": self.status}
+        return {"status": self.status, "listening": self.is_listening}
 
 # Instantiate Global Bot
 bot_instance = ZoomBot()

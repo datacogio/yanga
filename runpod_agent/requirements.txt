@@ -8,6 +8,10 @@ python-multipart
 webdriver-manager
 gTTS
 
+# Audio/STT
+SpeechRecognition
+PyAudio
+
 # Memory & Embeddings
 qdrant-client
 # sentence-transformers (Installed in Dockerfile explicitly for speed)
