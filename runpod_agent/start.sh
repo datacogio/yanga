@@ -47,4 +47,5 @@ fi
 # 4. Start FastAPI Server
 echo "Starting FastAPI Server..."
 # Assuming src module is in current directory or PYTHONPATH
-uvicorn src.api:app --host 0.0.0.0 --port 8000
+# Pipe output to both stdout (for RunPod Logs) and a file (for SSH tailing)
+uvicorn src.api:app --host 0.0.0.0 --port 8000 2>&1 | tee /workspace/agent.log
