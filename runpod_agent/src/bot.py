@@ -4,6 +4,8 @@ import base64
 import requests
 import json
 import time
+import os
+from gtts import gTTS
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -25,7 +27,7 @@ class VisionHelper:
     def decide_action(driver, name, join_url):
         """
         Sends current screenshot to Vision model and gets the next action instruction.
-        Returns: Tuple(ACTION_TYPE, REASONING)
+        Returns: Tuple(ACTION_TYPE, REASONING, SPEAK_TEXT)
         """
         try:
             screenshot_b64 = driver.get_screenshot_as_base64()
@@ -43,7 +45,11 @@ class VisionHelper:
             5. SUCCESS (If you see the meeting interface with microphone/video icons)
             
             Format: Check the image carefully. Return a JSON object:
-            {{ "action": "ACTION_NAME", "reasoning": "Brief explanation of what you see" }}
+            {{ 
+                "action": "ACTION_NAME", 
+                "reasoning": "Brief explanation of what you see",
+                "speak": "A short, natural sentence announcing what you are doing (e.g., 'I see the launch button, clicking it now.')"
+            }}
             """
 
             payload = {
@@ -62,19 +68,24 @@ class VisionHelper:
                 logger.info(f"Model Response: {result_text}")
                 try:
                     data = json.loads(result_text)
-                    return data.get("action", "WAIT"), data.get("reasoning", "No reasoning provided")
+                    return (
+                        data.get("action", "WAIT"), 
+                        data.get("reasoning", "No reasoning provided"),
+                        data.get("speak", "Processing...")
+                    )
                 except:
                     # Fallback if model outputs plain text
-                    if "LAUNCH" in result_text.upper(): return "CLICK_LAUNCH", result_text
-                    if "NAME" in result_text.upper(): return "ENTER_NAME", result_text
-                    if "CAPTCHA" in result_text.upper(): return "SOLVE_CAPTCHA", result_text
-                    return "WAIT", result_text
+                    speak_fallback = "I am unsure, waiting."
+                    if "LAUNCH" in result_text.upper(): return "CLICK_LAUNCH", result_text, "I see the launch button."
+                    if "NAME" in result_text.upper(): return "ENTER_NAME", result_text, "I am entering the name."
+                    if "CAPTCHA" in result_text.upper(): return "SOLVE_CAPTCHA", result_text, "There is a CAPTCHA."
+                    return "WAIT", result_text, speak_fallback
             else:
                 logger.error(f"Ollama Error: {response.text}")
-                return "WAIT", "Model Error"
+                return "WAIT", "Model Error", "I encountered an error."
         except Exception as e:
             logger.error(f"Vision Decision Failed: {e}")
-            return "WAIT", str(e)
+            return "WAIT", str(e), "System failure."
 
 class ZoomBot:
     def __init__(self):
@@ -104,12 +115,27 @@ class ZoomBot:
             logger.error(f"Failed: {e}")
             self.running = False
 
+    def speak(self, text):
+        """Synthesize text to speech and play it into the Virtual Mic."""
+        if not text: return
+        logger.info(f"🗣️ SPEAKING: {text}")
+        try:
+            tts = gTTS(text=text, lang='en')
+            tts.save("/tmp/speech.mp3")
+            # Play to PulseAudio (which is routed to VirtualMic via start.sh config)
+            # mpg123 is lightweight and robust
+            os.system("mpg123 -q /tmp/speech.mp3")
+        except Exception as e:
+            logger.error(f"TTS Failed: {e}")
+
     def join_meeting(self, join_url: str, name: str):
         if not self.driver: self.start_browser()
         if not self.driver: return False, "Driver Failed"
 
         try:
             logger.info(f"Navigating: {join_url}")
+            self.speak(f"Navigating to Zoom meeting.")
+            
             # Try efficient URL first
             if "/j/" in join_url and "wc" not in join_url:
                 mid = join_url.split("/j/")[1].split("?")[0]
@@ -128,17 +154,23 @@ class ZoomBot:
                 logger.info(f"--- Vision Cycle {i+1}/5 ---")
                 time.sleep(3) # Wait for render
                 
-                action, reasoning = VisionHelper.decide_action(self.driver, name, join_url)
+                action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
                 logger.info(f"DECISION: {action} | REASON: {reasoning}")
+                
+                # Speak the model's thought process
+                if speech: self.speak(speech)
                 
                 if action == "CLICK_LAUNCH":
                     self.perform_click_launch()
                 elif action == "ENTER_NAME":
                     if self.perform_enter_name(name):
+                        self.speak("I have entered the name and clicked Join.")
                         return True, "Joining (Name Entered)"
                 elif action == "SOLVE_CAPTCHA":
+                    self.speak("I see a CAPTCHA. Please help me.")
                     return True, "Blocked by CAPTCHA (Check VNC)"
                 elif action == "SUCCESS":
+                    self.speak("I am in the meeting.")
                     return True, "Already in Meeting"
                 elif action == "WAIT":
                     logger.info("Waiting for page change...")
@@ -150,6 +182,7 @@ class ZoomBot:
 
         except Exception as e:
             logger.error(f"Error: {e}")
+            self.speak("I encountered an error joining the meeting.")
             return False, str(e)
 
     def perform_click_launch(self):
