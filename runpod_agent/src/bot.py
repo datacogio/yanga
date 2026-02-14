@@ -65,8 +65,17 @@ class ZoomBot:
             # Ideally use the direct web client link if possible: `https://zoom.us/wc/{meeting_id}/join`
             
             if "/j/" in join_url:
+                # Extract meeting ID
                 meeting_id = join_url.split("/j/")[1].split("?")[0]
+                
+                # Construct Web Client URL
                 web_client_url = f"https://zoom.us/wc/{meeting_id}/join"
+                
+                # Preserve password (pwd) if present
+                if "pwd=" in join_url:
+                    pwd = join_url.split("pwd=")[1].split("&")[0]
+                    web_client_url += f"?pwd={pwd}"
+                
                 logger.info(f"Redirecting to Web Client URL: {web_client_url}")
                 self.driver.get(web_client_url)
             
@@ -88,10 +97,10 @@ class ZoomBot:
             # Wait for "Join Audio" prompt
             # ...
             
-            return True
+            return True, "Success"
         except Exception as e:
             logger.error(f"Error joining meeting: {e}")
-            return False
+            return False, str(e)
 
     def leave_meeting(self):
         if self.driver:

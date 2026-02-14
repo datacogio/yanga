@@ -17,11 +17,11 @@ def health_check():
 
 @app.post("/join")
 def join_meeting(request: JoinRequest):
-    success = bot_instance.join_meeting(request.url, request.name)
+    success, error_msg = bot_instance.join_meeting(request.url, request.name)
     if success:
         return {"message": "Attempting to join meeting", "url": request.url}
     else:
-        raise HTTPException(status_code=500, detail="Failed to initialize browser or join meeting")
+        raise HTTPException(status_code=500, detail=f"Failed to join meeting: {error_msg}")
 
 @app.post("/leave")
 def leave_meeting():
