@@ -9,6 +9,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH="/root/.local/bin:$PATH"
 ENV OLLAMA_HOST=localhost:11434
 ENV OLLAMA_MODELS=/workspace/ollama_models
+ENV QDRANT_HOST=localhost
+ENV QDRANT_PORT=6333
 
 # Set working directory to /workspace (RunPod's default persistent volume)
 # Configure APT retries and timeouts
