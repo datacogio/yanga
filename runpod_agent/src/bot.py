@@ -28,6 +28,12 @@ class ZoomBot:
         chrome_options.add_argument("--use-fake-ui-for-media-stream") # Allow cam/mic permissions automatically
         chrome_options.add_argument("--window-size=1920,1080")
         
+        # Stability Flags for Docker/RunPod
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        
         # Audio arguments for PulseAudio
         # chrome_options.add_argument("--use-file-for-fake-audio-capture=/dev/null") # Silence input if needed? 
         # Actually we want to capture audio, so we let it use the system default which is PulseAudio in our container
