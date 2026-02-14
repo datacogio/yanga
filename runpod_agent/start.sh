@@ -3,6 +3,11 @@ set -e
 
 echo "Starting Monolithic Zoom Agent..."
 
+# 0. Start SSH
+echo "Starting SSH..."
+mkdir -p /var/run/sshd
+/usr/sbin/sshd
+
 # 1. Start Xvfb (Virtual Framebuffer)
 echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &

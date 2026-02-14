@@ -38,6 +38,7 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     x11vnc \
     novnc \
     python3-numpy \
+    openssh-server \
     pulseaudio \
     socat \
     ffmpeg \
@@ -88,7 +89,7 @@ RUN chmod +x start.sh
 # Expose ports
 # 8000: FastAPI
 # 11434: Ollama (optional, providing local access)
-EXPOSE 8000 11434 5900 6080
+EXPOSE 8000 11434 5900 6080 22
 
 # Define the entrypoint
 ENTRYPOINT ["./start.sh"]
