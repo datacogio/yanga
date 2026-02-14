@@ -33,7 +33,21 @@ def test_browser():
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
         logger.info("Browser started successfully!")
-        logger.info(f"Title: {driver.title}")
+        
+        # Test 1: Simple Navigation
+        logger.info("Test 1: Navigating to example.com...")
+        driver.get("http://example.com")
+        logger.info(f"Page Title: {driver.title}")
+        driver.save_screenshot("debug_example.png")
+        logger.info("Saved debug_example.png")
+        
+        # Test 2: Zoom Navigation
+        logger.info("Test 2: Navigating to Zoom Web Client...")
+        zoom_url = "https://zoom.us/wc/join"
+        driver.get(zoom_url)
+        logger.info(f"Page Title: {driver.title}")
+        driver.save_screenshot("debug_zoom.png")
+        logger.info("Saved debug_zoom.png")
         
         logger.info("Attempting to quit...")
         driver.quit()

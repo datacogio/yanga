@@ -33,6 +33,8 @@ class ZoomBot:
         chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument("--disable-infobars")
         chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--disable-software-rasterizer") # Fix for some headless rendering crashes
+        chrome_options.add_argument("--user-data-dir=/tmp/chrome-data") # Isolate user data
         
         # Audio arguments for PulseAudio
         # chrome_options.add_argument("--use-file-for-fake-audio-capture=/dev/null") # Silence input if needed? 
