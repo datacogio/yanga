@@ -8,6 +8,10 @@ echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
 export DISPLAY=:99
 
+# 1.5 Start x11vnc
+echo "Starting x11vnc..."
+x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg
+
 # 2. Start PulseAudio (Fake Audio)
 echo "Starting PulseAudio..."
 pulseaudio -D --exit-idle-time=-1

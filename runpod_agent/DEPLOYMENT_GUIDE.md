@@ -29,20 +29,43 @@
  2. You should see a workflow named "Build and Push RunPod Agent" running.
  3. Once green, the image `yanga4/zoom-agent:latest` will be available on Docker Hub.
 
-## 3. Configure RunPod GPU Pod
-
-1.  **Go to RunPod Console** -> **Pods** -> **Deploy**.
-2.  **Select GPU:** Choose a GPU (e.g., RTX 3090, RTX 4090, or A4000).
-3.  **Select Template:** Click "Deploy" then "Customize Deployment" (or "Edit Template").
-4.  **Container Image:** Enter your image: `yanga4/zoom-agent:latest`.
-5.  **Container Disk:** Set to **20GB** or more (Docker layers + OS).
-6.  **Volume Disk:** Set to **20GB** or more (Important for Ollama models).
-7.  **Volume Mount Path:** `/workspace` (Default).
-8.  **Expose Ports:**
-    - `8000` (HTTP API)
-9.  **Environment Variables:**
-    - Key: `OLLAMA_HOST` | Value: `localhost:11434`
-10. **Start Pod.**
+## 3. Deploy on RunPod (Step-by-Step)
+ 
+ Once your GitHub Action is **Green** (Success), follow these steps:
+ 
+ 1.  **Login to RunPod:** Go to [runpod.io](https://www.runpod.io/) and log in.
+ 2.  **Navigate to Pods:** Click on **Pods** in the left sidebar, then click the **Deploy** button.
+ 3.  **Choose GPU:**
+     -   Select **Secure Cloud** (Recommended) or Community Cloud.
+     -   Choose a GPU. An **RTX 3090** or **RTX 4090** is good for starting.
+     -   Click the **Deploy** button on your chosen GPU card.
+ 4.  **Configure Template:**
+     -   In the "Customize Deployment" window, look for "Container Image".
+     -   **Image Name:** Enter `yanga4/zoom-agent:latest`
+     -   **Container Disk:** Set to `20 GB` (This holds your code & dependencies).
+     -   **Volume Disk:** Set to `20 GB` (This holds the Ollama models).
+     -   **Volume Mount Path:** `/workspace` (Leave as default).
+     -   **Container Registry Credentials (Optional):**
+         -   If your Docker Hub repo is **Private**, expanded "Container Registry Credentials".
+         -   Select "Docker Hub" and enter your Username (`yanga4`) and Access Token (Password).
+         -   If it is **Public**, you can skip this.
+ 5.  **Expose Ports:**
+     -   In the **"Expose HTTP Ports"** field: `8000`
+     -   **(Optional Debugging):** Add `5900` if you need to see the browser via VNC.
+     -   **Security Note:** Do NOT expose `11434` unless you want the entire internet to query your Ollama model. The Agent talks to it internally via `localhost`, so you don't need to expose it.
+ 6.  **Environment Variables:**
+     -   Click "Add Variable".
+     -   **Key:** `OLLAMA_HOST`
+     -   **Value:** `localhost:11434`
+ 7.  **Start Deployment:**
+     -   Click **Set Overrides**.
+     -   Click **Deploy**.
+ 
+ ### Accessing the Agent
+ 1.  Wait for the Pod to show **"Running"**.
+ 2.  Click the **Connect** button.
+ 3.  Click **HTTP Service [Port 8000]**.
+ 4.  This opens your agent's API URL (e.g., `https://your-pod-id-8000.proxy.runpod.net`).
 
 ## 4. Verify Deployment across Internet
 

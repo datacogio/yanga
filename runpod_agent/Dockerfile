@@ -35,6 +35,7 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
 RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     apt-get install -y --no-install-recommends \
     xvfb \
+    x11vnc \
     pulseaudio \
     socat \
     ffmpeg \
