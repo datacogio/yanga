@@ -69,6 +69,20 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Fix ALSA errors by configuring it to use PulseAudio
+RUN echo "pcm.!default {\n\
+    type pulse\n\
+    fallback \"sysdefault\"\n\
+    hint {\n\
+    show on\n\
+    description \"Default ALSA Output (currently PulseAudio Sound Server)\"\n\
+    }\n\
+    }\n\
+    ctl.!default {\n\
+    type pulse\n\
+    fallback \"sysdefault\"\n\
+    }" > /etc/asound.conf
+
 # Install Google Chrome Stable
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
     apt-get update && \
