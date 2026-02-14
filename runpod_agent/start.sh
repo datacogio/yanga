@@ -13,9 +13,20 @@ echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
 export DISPLAY=:99
 
-# 1.5 Start x11vnc
+# Wait for Xvfb to be ready
+echo "Waiting for Xvfb..."
+for i in {1..10}; do
+    if xdpyinfo -display :99 >/dev/null 2>&1; then
+        echo "Xvfb is ready."
+        break
+    fi
+    echo "Waiting for Xvfb..."
+    sleep 1
+done
+
+# 1.5 Start x11vnc with Retry Logic
 echo "Starting x11vnc..."
-x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg
+x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg -o /var/log/x11vnc.log -auth guess
 
 # 1.6 Start noVNC/websockify
 echo "Starting noVNC..."
