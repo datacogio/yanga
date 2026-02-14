@@ -9,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 
+# Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ZoomBot")
 
@@ -19,69 +20,90 @@ class ZoomBot:
 
     def start_browser(self):
         logger.info("Starting Chrome HEADED (Xvfb)...")
-        opts = Options()
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--disable-gpu")
-        opts.add_argument("--use-fake-ui-for-media-stream")
-        opts.add_argument("--window-size=1920,1080")
-        opts.add_argument("--disable-extensions")
-        opts.add_argument("--disable-setuid-sandbox")
-        opts.add_argument("--disable-infobars")
-        opts.add_argument("--user-data-dir=/tmp/headed-session") 
-        opts.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        chrome_options = Options()
+        # Headless DISABLED -> We are using Xvfb
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--use-fake-ui-for-media-stream")
+        chrome_options.add_argument("--window-size=1920,1080")
+        
+        # Stability Flags
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--user-data-dir=/tmp/headed-session") 
+
+        # Add User Agent
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
         try:
             service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=opts)
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.running = True
-            logger.info("Browser started.")
+            logger.info("Browser started successfully.")
         except Exception as e:
-            logger.error(f"Failed: {e}")
+            logger.error(f"Failed to start browser: {e}")
             self.running = False
 
     def join_meeting(self, join_url: str, name: str):
-        if not self.driver: self.start_browser()
-        if not self.driver: return False, "Driver Failed"
+        if not self.driver:
+            self.start_browser()
+        
+        if not self.driver:
+            return False, "Failed to start browser (driver is None)"
 
         try:
-            logger.info(f"Navigating: {join_url}")
+            logger.info(f"Navigating to meeting: {join_url}")
             
             if "/j/" in join_url:
-                mid = join_url.split("/j/")[1].split("?")[0]
-                url = f"https://zoom.us/wc/{mid}/join"
+                meeting_id = join_url.split("/j/")[1].split("?")[0]
+                web_client_url = f"https://zoom.us/wc/{meeting_id}/join"
                 if "pwd=" in join_url:
                     pwd = join_url.split("pwd=")[1].split("&")[0]
-                    url += f"?pwd={pwd}"
-                self.driver.get(url)
+                    web_client_url += f"?pwd={pwd}"
+                
+                logger.info(f"Redirecting to Web Client URL: {web_client_url}")
+                self.driver.get(web_client_url)
             else:
                  self.driver.get(join_url)
             
-            logger.info("Page loaded. Waiting for input...")
+            logger.info("Page loaded. Checking for inputs...")
+            
             try:
-                inp = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "inputname")))
-                inp.clear()
-                inp.send_keys(name)
+                name_input = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "inputname"))
+                )
+                name_input.clear()
+                name_input.send_keys(name)
                 
-                btn = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.ID, "joinBtn")))
-                btn.click()
-                logger.info("Clicked Join.")
-                return True, "Joining..."
+                join_btn = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.ID, "joinBtn"))
+                )
+                join_btn.click()
+                logger.info("Clicked Join. Success expected.")
+                return True, "Attempting to Join"
             except:
-                logger.warning("Input not found. CHECK VNC!")
-                return True, "Check VNC"
+                logger.warning("Could not find Name Input. Possible CAPTCHA or 'Launch Meeting' page.")
+                logger.warning("CHECK VNC NOW: https://dw6jmrra07xk3f-6080.proxy.runpod.net/vnc.html")
+                return True, "Check VNC for Interaction"
 
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error joining meeting: {e}")
             return False, str(e)
 
     def leave_meeting(self):
         if self.driver:
-            self.driver.quit()
-            self.driver = None
-            self.running = False
+            try:
+                self.driver.quit()
+                logger.info("Browser closed.")
+            except Exception as e:
+                logger.error(f"Error closing browser: {e}")
+            finally:
+                self.driver = None
+                self.running = False
 
     def get_status(self):
-        return {"running": self.running}
+        return {"running": self.running, "title": self.driver.title if self.driver else None}
 
 bot_instance = ZoomBot()
