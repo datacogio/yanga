@@ -76,11 +76,14 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Install Python dependencies
+# Update pip to fix dependency resolver issues
+RUN pip3 install --upgrade pip
+
 # OPTIMIZATION: Install PyTorch CPU first to speed up build (avoiding 700MB GPU version)
 RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # OPTIMIZATION: Install Scientific Stack first (Strict Pins)
-RUN pip3 install --no-cache-dir numpy==1.26.4 scipy==1.12.0
+RUN pip3 install --no-cache-dir numpy==1.26.4 scipy==1.12.0 sentence-transformers==2.7.0
 
 # We'll copy requirements.txt first to leverage Docker cache
 COPY requirements.txt .
