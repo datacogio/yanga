@@ -40,11 +40,11 @@ class ZoomBot:
         # chrome_options.add_argument("--use-file-for-fake-audio-capture=/dev/null") # Silence input if needed? 
         # Actually we want to capture audio, so we let it use the system default which is PulseAudio in our container
         
-        # Stealth / Anti-Bot Flags
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        # Stealth / Anti-Bot Flags (Temporarily Disabled for Stability)
+        # chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
+        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # chrome_options.add_experimental_option('useAutomationExtension', False)
 
         try:
             # In Docker, we might need to specify the driver path if installed via apt-get
@@ -52,14 +52,14 @@ class ZoomBot:
             service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
-            # Stealth: Execute CDP command to hide webdriver property
-            self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    })
-                """
-            })
+            # Stealth: Execute CDP command to hide webdriver property (Disabled)
+            # self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            #    "source": """
+            #        Object.defineProperty(navigator, 'webdriver', {
+            #            get: () => undefined
+            #        })
+            #    """
+            # })
             
             self.running = True
             logger.info("Browser started successfully.")
