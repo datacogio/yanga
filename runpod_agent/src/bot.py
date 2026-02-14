@@ -197,6 +197,28 @@ class ZoomBot:
             logger.error(f"LLM Error: {e}")
         return "I didn't quite catch that."
 
+    def check_meeting_status_via_dom(self):
+        """
+        Checks DOM for indicators that we are successfully IN the meeting.
+        This overrides the Vision Model if it's hallucinating (e.g. False Captcha).
+        """
+        try:
+            # 1. Check for 'Leave' or 'End' button (Universal indicator)
+            leave_btn = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Leave') or contains(@aria-label, 'Leave')]")
+            if leave_btn: return "IN_MEETING"
+            
+            # 2. Check for 'Mute' / 'Unmute' button (Audio connected)
+            mute_btn = self.driver.find_elements(By.XPATH, "//button[contains(@aria-label, 'mute') or contains(@aria-label, 'unmute')]")
+            if mute_btn: return "IN_MEETING"
+            
+            # 3. Check for 'Chat' or 'Participants'
+            footer_btns = self.driver.find_elements(By.CLASS_NAME, "footer-button__button")
+            if len(footer_btns) > 2: return "IN_MEETING"
+            
+            return None
+        except:
+            return None
+
     def join_meeting(self, join_url: str, name: str):
         if not self.driver: self.start_browser()
         if not self.driver: return False, "Driver Failed"
@@ -226,7 +248,17 @@ class ZoomBot:
             for i in range(15):
                 logger.info(f"--- Vision Cycle {i+1}/15 ---")
                 
-                action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
+                # FAST PATH: Check DOM first!
+                dom_status = self.check_meeting_status_via_dom()
+                if dom_status == "IN_MEETING":
+                    logger.info("DOM CHECK: Successfully detected meeting interface!")
+                    action = "END_SUCCESS"
+                    reasoning = "DOM elements found (Leave/Mute buttons)"
+                    speech = None
+                else:
+                    # SLOW PATH: Vision Model
+                    action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
+                
                 logger.info(f"DECISION: {action} | REASON: {reasoning}")
                 
                 if speech: self.speak(speech)
