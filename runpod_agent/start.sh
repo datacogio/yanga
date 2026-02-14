@@ -12,6 +12,10 @@ export DISPLAY=:99
 echo "Starting x11vnc..."
 x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg
 
+# 1.6 Start noVNC/websockify
+echo "Starting noVNC..."
+/usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &
+
 # 2. Start PulseAudio (Fake Audio)
 echo "Starting PulseAudio..."
 pulseaudio -D --exit-idle-time=-1
