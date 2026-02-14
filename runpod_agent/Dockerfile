@@ -76,6 +76,9 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Install Python dependencies
+# OPTIMIZATION: Install PyTorch CPU first to speed up build (avoiding 700MB GPU version)
+RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
 # We'll copy requirements.txt first to leverage Docker cache
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
