@@ -100,11 +100,19 @@ class ZoomBot:
         self.status = "IDLE"
         self.recognizer = sr.Recognizer()
         self.is_listening = False
+        self.mic_index = None
 
-        # DEBUG: List Audio Devices for troubleshooting
+        # Audio Setup: Find 'SpeakerSink.monitor'
         try:
             mics = sr.Microphone.list_microphone_names()
             logger.info(f"Available Microphones: {mics}")
+            for i, mic_name in enumerate(mics):
+                if "SpeakerSink" in mic_name and "monitor" in mic_name:
+                    self.mic_index = i
+                    logger.info(f"Selected Mic: {mic_name} (Index {i})")
+                    break
+            if self.mic_index is None:
+                logger.warning("SpeakerSink.monitor not found! Using default.")
         except Exception as e:
             logger.error(f"Failed to list microphones: {e}")
 
@@ -132,25 +140,27 @@ class ZoomBot:
             self.status = "ERROR"
 
     def speak(self, text):
-        """Uses gTTS to generate speech and plays it via mpg123 into the Virtual Mic."""
+        """Uses gTTS to generate speech and plays it via mpg123 into MicSink."""
         try:
             logger.info(f"Speaking: {text}")
             tts = gTTS(text=text, lang='en')
             tts.save("/tmp/speech.mp3")
-            os.system("mpg123 -q /tmp/speech.mp3") # -q for quiet logs
+            # Play to MicSink so Zoom hears it
+            os.system("PULSE_SINK=MicSink mpg123 -q /tmp/speech.mp3") 
         except Exception as e:
             logger.error(f"TTS Error: {e}")
 
     def listen(self):
         """Listens for audio input via PulseAudio Virtual Source."""
         try:
-            with sr.Microphone() as source:
+            # Use specific device index (SpeakerSink.monitor)
+            with sr.Microphone(device_index=self.mic_index) as source:
                 logger.info("Listening...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 
                 try:
-                    # Using Google STT for lightweight speed (Whisper is better but heavier)
+                    # Using Google STT for lightweight speed 
                     text = self.recognizer.recognize_google(audio)
                     logger.info(f"Heard: {text}")
                     return text
@@ -160,7 +170,7 @@ class ZoomBot:
                     logger.error(f"STT Error: {e}")
                     return None
         except Exception as e:
-            logger.error(f"Mic Error: {e}")
+            # logger.error(f"Mic Error: {e}")
             return None
 
     def start_conversation_loop(self):

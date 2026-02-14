@@ -40,18 +40,29 @@ echo "Starting noVNC..."
 # 2. Start PulseAudio (Fake Audio)
 echo "Starting PulseAudio..."
 pulseaudio -D --exit-idle-time=-1
-# Create a virtual sink for Chrome to output audio potentiall
-pactl load-module module-null-sink sink_name=VirtualSink sink_properties=device.description=VirtualSink
 
-# Create Virtual Microphone for Text-to-Speech Input into Zoom
-# We use module-virtual-source which is cleaner than just monitoring a sink
-pactl load-module module-null-sink sink_name=VirtualMic sink_properties=device.description=Virtual_Microphone_Sink
-pactl load-module module-virtual-source source_name=VirtualMicSource master=VirtualMic.monitor source_properties=device.description=Virtual_Microphone_Input
+# --- AUDIO ROUTING ARCHITECTURE ---
+# Goal: 
+# 1. Zoom Output (Speaker) -> Agent Input (Mic)
+# 2. Agent Output (Speaker) -> Zoom Input (Mic)
 
-# Set Default Source to our Virtual Mic
-pactl set-default-source VirtualMicSource
-pactl set-source-mute VirtualMicSource 0
-pactl set-sink-mute VirtualMic 0
+# A. Create SpeakerSink (Zoom Output)
+# Chrome will play audio here (Default Sink). 
+# Agent will listen to SpeakerSink.monitor.
+pactl load-module module-null-sink sink_name=SpeakerSink sink_properties=device.description=Speaker_Sink
+pactl set-default-sink SpeakerSink
+
+# B. Create MicSink (Zoom Input)
+# Agent will play 'mpg123' here.
+# Chrome will listen to MicSink.monitor (Default Source).
+pactl load-module module-null-sink sink_name=MicSink sink_properties=device.description=Microphone_Sink
+pactl load-module module-virtual-source source_name=MicSource master=MicSink.monitor source_properties=device.description=Microphone_Source
+pactl set-default-source MicSource
+
+# Unmute everything just in case
+pactl set-sink-mute SpeakerSink 0
+pactl set-sink-mute MicSink 0
+pactl set-source-mute MicSource 0
 
 # 3. Start Ollama Serve
 echo "Starting Ollama..."
