@@ -233,19 +233,28 @@ class ZoomBot:
     def perform_enter_name(self, name):
         logger.info(f"Executing ENTER_NAME: {name}...")
         try:
-            self.driver.execute_script(f"""
-                var input = document.querySelector('input[type="text"]');
-                if (input) {{
-                    input.value = "{name}";
-                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                }}
+            # Locate Input Field
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="text"]'))
+            )
+            input_field = self.driver.find_element(By.CSS_SELECTOR, 'input[type="text"]')
+            
+            # Clear and Send Keys (Simulates real typing to trigger React/Vue events)
+            input_field.clear()
+            input_field.send_keys(name)
+            time.sleep(1) # Let UI update
+            
+            # Locate and Click Join Button
+            join_btn = self.driver.find_element(By.CSS_SELECTOR, 'button.preview-join-button')
+            # Check if enabled
+            if join_btn.is_enabled():
+                join_btn.click()
+                logger.info("Clicked Join Button")
+                return True
+            else:
+                logger.warning("Join Button is still disabled!")
+                return False
                 
-                setTimeout(() => {{
-                    var joinBtn = document.querySelector('button.preview-join-button');
-                    if (joinBtn) joinBtn.click();
-                }}, 1000);
-            """)
-            return True
         except Exception as e:
             logger.error(f"Enter Name Failed: {e}")
             return False

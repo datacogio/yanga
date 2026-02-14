@@ -30,20 +30,22 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
+    python3-venv \
     git \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
-    apt-get install -y --no-install-recommends \
     xvfb \
     x11vnc \
     novnc \
+    websockify \
+    net-tools \
+    gnupg \
     python3-numpy \
     openssh-server \
     pulseaudio \
     socat \
     ffmpeg \
+    mpg123 \
+    dbus-x11 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
