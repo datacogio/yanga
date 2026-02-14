@@ -3,8 +3,9 @@ uvicorn
 selenium
 requests==2.31.0
 urllib3<2.0
-numpy
-scipy
+# Scientific Stack (Pin versions to avoid resolver backtracking)
+numpy<2.0
+scipy<1.11.0
 pydantic>=2.4.0
 python-multipart
 # Chrome driver management is handled by installing matching packages or manual drift manage
