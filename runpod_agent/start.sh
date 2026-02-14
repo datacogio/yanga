@@ -65,8 +65,14 @@ pactl set-default-source SpeakerSink.monitor
 
 # Unmute everything just in case
 pactl set-sink-mute SpeakerSink 0
+pactl set-source-mute SpeakerSink.monitor 0
+pactl set-sink-volume SpeakerSink 65536
+pactl set-source-volume SpeakerSink.monitor 65536
+
 pactl set-sink-mute MicSink 0
 pactl set-source-mute MicSource 0
+pactl set-sink-volume MicSink 65536
+pactl set-source-volume MicSource 65536
 
 # 3. Start Ollama Serve
 echo "Starting Ollama..."

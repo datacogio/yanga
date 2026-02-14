@@ -138,23 +138,30 @@ class ZoomBot:
             logger.error(f"TTS Error: {e}")
 
     def listen(self):
-        """Listens for audio input via PulseAudio Default Source (SpeakerSink.monitor)."""
+        """Listens for audio input via PulseAudio Default Source."""
         try:
-            # Use default device (index None)
             with sr.Microphone() as source:
-                logger.info("Listening...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                logger.info("Listening... (Adjusting for ambient noise...)")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                logger.info(f"Energy Threshold: {self.recognizer.energy_threshold}")
                 
+                try:
+                    audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
+                    logger.info(f"Audio captured! Size: {len(audio.get_raw_data())} bytes")
+                except sr.WaitTimeoutError:
+                    logger.warning("Listening timed out (No speech detected).")
+                    return None
+
                 try:
                     # Using Google STT for lightweight speed 
                     text = self.recognizer.recognize_google(audio)
                     logger.info(f"Heard: {text}")
                     return text
                 except sr.UnknownValueError:
+                    logger.info("STT: Could not understand audio (Unintelligible).")
                     return None
                 except sr.RequestError as e:
-                    logger.error(f"STT Error: {e}")
+                    logger.error(f"STT Service Error: {e}")
                     return None
         except Exception as e:
             logger.error(f"Mic Error: {e}")
