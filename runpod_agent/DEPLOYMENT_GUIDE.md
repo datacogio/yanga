@@ -5,28 +5,29 @@
 - A Docker Registry account (Docker Hub, GitHub Container Registry, etc.).
 - A RunPod account with credits.
 
-## 2. Build and Push Docker Image
-
-**Note:** RunPod requires the image to be publicly accessible or configured with private registry credentials.
-
-### Step 2.1: Login to Registry
-Replace `yanga4` with your Docker Hub username.
-```bash
-docker login
-```
-
-### Step 2.2: Build the Image
-Navigate to the `sensory_agent/runpod_agent` directory.
-**Important:** You must build for `linux/amd64` because RunPod uses Intel/AMD CPUs.
-```bash
-cd sensory_agent/runpod_agent
-docker build --platform linux/amd64 -t yanga4/zoom-agent:latest .
-```
-
-### Step 2.3: Push the Image
-```bash
-docker push yanga4/zoom-agent:latest
-```
+## 2. Build and Push Docker Image (Automated via GitHub Actions)
+ 
+ Instead of building locally (which can be slow or fail on Apple Silicon), we use **GitHub Actions** to automatically build and push the image.
+ 
+ ### Step 2.1: Configure GitHub Secrets
+ 1. Go to your GitHub Repository -> **Settings** -> **Secrets and variables** -> **Actions**.
+ 2. Click **New repository secret**.
+ 3. Add the following secrets:
+    - `DOCKER_USERNAME`: `yanga4`
+    - `DOCKER_PASSWORD`: Your Docker Hub Access Token (or password).
+ 
+ ### Step 2.2: Trigger the Build
+ Simply push your code to the `main` branch.
+ ```bash
+ git add .
+ git commit -m "Update agent"
+ git push origin main
+ ```
+ 
+ ### Step 2.3: Verify Build
+ 1. Go to the **Actions** tab in your GitHub repository.
+ 2. You should see a workflow named "Build and Push RunPod Agent" running.
+ 3. Once green, the image `yanga4/zoom-agent:latest` will be available on Docker Hub.
 
 ## 3. Configure RunPod GPU Pod
 

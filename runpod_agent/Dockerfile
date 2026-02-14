@@ -21,6 +21,7 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     ca-certificates \
     curl \
     wget \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
