@@ -47,37 +47,24 @@ class ZoomBot:
         if not self.driver:
             self.start_browser()
         
+        if not self.driver:
+            return False, "Failed to start browser (driver is None)"
+
         try:
             logger.info(f"Navigating to meeting: {join_url}")
-            self.driver.get(join_url)
             
-            # Zoom Web Client Logic (Simplified)
-            # 1. Dismiss cookie banners or popups if any (omitted for brevity)
-            
-            # 2. Handle "Launch Meeting" page -> "Join from your browser"
-            # This is tricky as Zoom changes selectors often.
-            # Strategy: detecting if we are on the launcher page and clicking "Join from browser"
-            
-            # Note: A robust implementation would need complex selectors. 
-            # This is a placeholder for the logic to reach the "Join" button.
-            
-            # Bypass system dialog prompt is tricky in Headless. 
-            # Ideally use the direct web client link if possible: `https://zoom.us/wc/{meeting_id}/join`
-            
+            # Zoom Web Client Logic
             if "/j/" in join_url:
-                # Extract meeting ID
                 meeting_id = join_url.split("/j/")[1].split("?")[0]
-                
-                # Construct Web Client URL
                 web_client_url = f"https://zoom.us/wc/{meeting_id}/join"
-                
-                # Preserve password (pwd) if present
                 if "pwd=" in join_url:
                     pwd = join_url.split("pwd=")[1].split("&")[0]
                     web_client_url += f"?pwd={pwd}"
                 
                 logger.info(f"Redirecting to Web Client URL: {web_client_url}")
                 self.driver.get(web_client_url)
+            else:
+                 self.driver.get(join_url)
             
             # Wait for input name field
             name_input = WebDriverWait(self.driver, 20).until(
@@ -94,12 +81,15 @@ class ZoomBot:
             
             logger.info("Clicked Join button. Waiting for meeting connection...")
             
-            # Wait for "Join Audio" prompt
-            # ...
-            
             return True, "Success"
         except Exception as e:
             logger.error(f"Error joining meeting: {e}")
+            if self.driver:
+                try:
+                    self.driver.save_screenshot("/workspace/error.png")
+                    logger.info("Saved failure screenshot to /workspace/error.png")
+                except:
+                    pass
             return False, str(e)
 
     def leave_meeting(self):
