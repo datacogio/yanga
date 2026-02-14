@@ -59,6 +59,7 @@ RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     libxss1 \
     libxcomposite1 \
     libasound2 \
+    libasound2-plugins \
     libpangocairo-1.0-0 \
     libx11-xcb1 \
     libxrandr2 \

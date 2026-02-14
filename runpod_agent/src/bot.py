@@ -24,7 +24,7 @@ logger = logging.getLogger("ZoomBot")
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 VISION_MODEL = "llama3.2-vision"
-CHAT_MODEL = "llama3.2-vision" # Using same model or 'llama3' for chat
+CHAT_MODEL = "llama3.2-vision" # Using same model for chat logic
 
 class VisionHelper:
     @staticmethod
@@ -101,6 +101,13 @@ class ZoomBot:
         self.recognizer = sr.Recognizer()
         self.is_listening = False
 
+        # DEBUG: List Audio Devices for troubleshooting
+        try:
+            mics = sr.Microphone.list_microphone_names()
+            logger.info(f"Available Microphones: {mics}")
+        except Exception as e:
+            logger.error(f"Failed to list microphones: {e}")
+
     def start_browser(self):
         """Initializes the Selenium Chrome Driver with Audio support."""
         logger.info("Starting Chrome Browser...")
@@ -153,7 +160,7 @@ class ZoomBot:
                     logger.error(f"STT Error: {e}")
                     return None
         except Exception as e:
-            # logger.error(f"Mic Error: {e}")
+            logger.error(f"Mic Error: {e}")
             return None
 
     def start_conversation_loop(self):
@@ -174,12 +181,11 @@ class ZoomBot:
                 if response_text:
                     self.speak(response_text)
             
-            # Check if meeting ended (Quick vision check every 10s)
-            # (Simplified for now to keep loop tight)
-            
-            # Check status flag
+            # Check if meeting ended (Quick vision check logic or status check)
             if self.status != "IN_MEETING":
                 break
+        
+        logger.info("Conversation Loop Ended.")
 
     def ask_llm(self, text):
         """Sends text to Ollama for a chat response."""
@@ -200,14 +206,14 @@ class ZoomBot:
     def check_meeting_status_via_dom(self):
         """
         Checks DOM for indicators that we are successfully IN the meeting.
-        This overrides the Vision Model if it's hallucinating (e.g. False Captcha).
+        This overrides the Vision Model if it's hallucinating.
         """
         try:
-            # 1. Check for 'Leave' or 'End' button (Universal indicator)
+            # 1. Check for 'Leave' or 'End' button
             leave_btn = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Leave') or contains(@aria-label, 'Leave')]")
             if leave_btn: return "IN_MEETING"
             
-            # 2. Check for 'Mute' / 'Unmute' button (Audio connected)
+            # 2. Check for 'Mute' / 'Unmute' button
             mute_btn = self.driver.find_elements(By.XPATH, "//button[contains(@aria-label, 'mute') or contains(@aria-label, 'unmute')]")
             if mute_btn: return "IN_MEETING"
             
@@ -254,7 +260,7 @@ class ZoomBot:
                     logger.info("DOM CHECK: Successfully detected meeting interface!")
                     action = "END_SUCCESS"
                     reasoning = "DOM elements found (Leave/Mute buttons)"
-                    speech = None
+                    speech = None # Wait for explicit hello
                 else:
                     # SLOW PATH: Vision Model
                     action, reasoning, speech = VisionHelper.decide_action(self.driver, name, join_url)
@@ -267,7 +273,7 @@ class ZoomBot:
                     self.perform_click_launch()
                 elif action == "ENTER_NAME":
                     if self.perform_enter_name(name):
-                        pass # Spoken by helper
+                        pass 
                 elif action == "CLICK_JOIN_AUDIO":
                     self.perform_join_audio()
                 elif action == "SOLVE_CAPTCHA":
@@ -278,7 +284,7 @@ class ZoomBot:
                     self.leave_meeting()
                     return True, "Meeting Ended"
                 elif action == "END_SUCCESS":
-                    self.speak("I am connected.")
+                    self.speak("Hello everyone, I have joined the meeting.")
                     self.status = "IN_MEETING"
                     success = True
                     break # Exit Vision Loop, Enter Chat Loop
@@ -288,9 +294,7 @@ class ZoomBot:
                 time.sleep(3)
 
             if success:
-                # Start Conversation Thread (Non-blocking if we want API to return)
-                # But for now, we run it blocking or in bg.
-                # Let's run it in a thread so the API returns "Success"
+                # Start Conversation Thread (Non-blocking)
                 threading.Thread(target=self.start_conversation_loop, daemon=True).start()
                 return True, "Joined & Listening"
             else:
@@ -344,15 +348,20 @@ class ZoomBot:
     def perform_enter_name(self, name):
         logger.info(f"Executing ENTER_NAME: {name}...")
         try:
+            # Locate Input Field
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="text"]'))
             )
             input_field = self.driver.find_element(By.CSS_SELECTOR, 'input[type="text"]')
+            
+            # Clear and Send Keys (Simulates real typing)
             input_field.clear()
             input_field.send_keys(name)
-            time.sleep(1)
+            time.sleep(1) 
             
+            # Locate and Click Join Button
             join_btn = self.driver.find_element(By.CSS_SELECTOR, 'button.preview-join-button')
+            # Check if enabled
             if join_btn.is_enabled():
                 join_btn.click()
                 logger.info("Clicked Join Button")
@@ -360,6 +369,7 @@ class ZoomBot:
             else:
                 logger.warning("Join Button is still disabled!")
                 return False
+                
         except Exception as e:
             logger.error(f"Enter Name Failed: {e}")
             return False
