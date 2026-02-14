@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  agent-core:
+    build:
+      context: ../
+      dockerfile: agent/Dockerfile
+    container_name: sensory-agent-core
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - DB_URL=postgresql://postgres:password@agent-db:5432/agent_memory
+      - REDIS_URL=redis://redis-service:6379/0
+      # Use host gateway to access the Ollama instance running on the RunPod host
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROME_USER_DATA=/app/browser_data
+    volumes:
+      - ../agent:/app/agent
+      - agent_browser_data:/app/browser_data
+    depends_on:
+      - agent-db
+      - redis-service
+    ports:
+      - "5900:5900" # VNC
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent-network
+    command: [ "/app/startup.sh" ]
+
+  agent-worker:
+    build:
+      context: ../
+      dockerfile: agent/Dockerfile
+    container_name: sensory-agent-worker
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_URL=postgresql://postgres:password@agent-db:5432/agent_memory
+      - REDIS_URL=redis://redis-service:6379/0
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ../agent:/app/agent
+    depends_on:
+      - agent-db
+      - redis-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent-network
+    command: [ "celery", "-A", "agent.worker", "worker", "--loglevel=info" ]
+
+  agent-db:
+    image: pgvector/pgvector:pg16
+    container_name: sensory-agent-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=agent_memory
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - agent-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-service:
+    image: redis:alpine
+    container_name: sensory-agent-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - agent-network
+
+  novnc-sidecar:
+    image: theasp/novnc:latest
+    container_name: sensory-novnc
+    environment:
+      - DISPLAY_WIDTH=1920
+      - DISPLAY_HEIGHT=1080
+      - RUN_XTERM=no
+    depends_on:
+      - agent-core
+    ports:
+      - "6080:8080"
+    networks:
+      - agent-network
+    command: [ "--web", "/usr/share/novnc/", "--target-host", "agent-core", "--target-port", "5900" ]
+
+volumes:
+  agent_browser_data:
+  postgres_data:
+
+
+networks:
+  agent-network:
+    driver: bridge

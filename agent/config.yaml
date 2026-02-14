@@ -1,0 +1,15 @@
+llm:
+  provider: ollama
+  model: deepseek-r1:1.5b
+  base_url: http://ollama-service:11434
+  # api_key: "" # Environment variable GOOGLE_API_KEY preferred
+
+memory:
+  postgres_url: postgresql://postgres:password@agent-db:5432/agent_memory
+  embedding_provider: ollama
+  embedding_model: nomic-embed-text
+  embedding_base_url: http://ollama-service:11434
+
+browser:
+  headless: false
+  user_data_dir: /app/browser_data

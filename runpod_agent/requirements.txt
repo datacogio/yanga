@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+selenium
+requests
+numpy
+scipy
+pydantic
+python-multipart
+# Chrome driver management is handled by installing matching packages or manual drift manage
+# but webdriver-manager can be useful if versions drift
+webdriver-manager

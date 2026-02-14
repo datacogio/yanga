@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  agent-core:
+    build:
+      context: ../
+      dockerfile: agent/Dockerfile
+    container_name: sensory-agent-core
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - DB_URL=postgresql://postgres:password@agent-db:5432/agent_memory
+      - REDIS_URL=redis://redis-service:6379/0
+      # Docker Desktop for Mac resolves this automatically to the host
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROME_USER_DATA=/app/browser_data
+    volumes:
+      - ../agent:/app/agent
+      - agent_browser_data:/app/browser_data
+    depends_on:
+      - agent-db
+      - redis-service
+    ports:
+      - "5901:5900" # VNC (mapped to 5901 to avoid Mac Screen Sharing conflict)
+    networks:
+      - agent-network
+    command: [ "/app/startup.sh" ]
+
+  agent-worker:
+    build:
+      context: ../
+      dockerfile: agent/Dockerfile
+    container_name: sensory-agent-worker
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_URL=postgresql://postgres:password@agent-db:5432/agent_memory
+      - REDIS_URL=redis://redis-service:6379/0
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ../agent:/app/agent
+    depends_on:
+      - agent-db
+      - redis-service
+    networks:
+      - agent-network
+    command: [ "celery", "-A", "agent.worker", "worker", "--loglevel=info" ]
+
+  agent-db:
+    image: pgvector/pgvector:pg16
+    container_name: sensory-agent-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=agent_memory
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - agent-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-service:
+    image: redis:alpine
+    container_name: sensory-agent-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - agent-network
+
+volumes:
+  agent_browser_data:
+  postgres_data:
+
+
+networks:
+  agent-network:
+    driver: bridge
