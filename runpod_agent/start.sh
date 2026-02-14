@@ -10,23 +10,28 @@ mkdir -p /var/run/sshd
 
 # 1. Start Xvfb (Virtual Framebuffer)
 echo "Starting Xvfb..."
+# Cleanup potential locks from previous crashes to prevent startup failure
+rm -f /tmp/.X99-lock
+rm -f /tmp/.X11-unix/X99
+
 Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
 export DISPLAY=:99
 
-# Wait for Xvfb to be ready
+# Wait for Xvfb to be ready (up to 20s)
 echo "Waiting for Xvfb..."
-for i in {1..10}; do
+for i in {1..20}; do
     if xdpyinfo -display :99 >/dev/null 2>&1; then
         echo "Xvfb is ready."
         break
     fi
-    echo "Waiting for Xvfb..."
+    echo "Waiting for Xvfb ($i/20)..."
     sleep 1
 done
 
-# 1.5 Start x11vnc with Retry Logic
+# 1.5 Start x11vnc (Non-fatal)
 echo "Starting x11vnc..."
-x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg -o /var/log/x11vnc.log -auth guess
+# Use -bg to background. If it fails, log it but don't crash the container.
+x11vnc -display :99 -forever -nopw -shared -rfbport 5900 -bg -o /var/log/x11vnc.log || echo "WARNING: x11vnc failed to start."
 
 # 1.6 Start noVNC/websockify
 echo "Starting noVNC..."
