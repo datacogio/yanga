@@ -138,31 +138,44 @@ class ZoomBot:
             logger.error(f"TTS Error: {e}")
 
     def listen(self):
-        """Listens for audio input via PulseAudio Default Source."""
+        """Listens for audio input via PulseAudio Default Source (Force SpeakerSink.monitor)."""
         try:
-            with sr.Microphone() as source:
-                logger.info("Listening... (Adjusting for ambient noise...)")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                logger.info(f"Energy Threshold: {self.recognizer.energy_threshold}")
-                
-                try:
-                    audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
-                    logger.info(f"Audio captured! Size: {len(audio.get_raw_data())} bytes")
-                except sr.WaitTimeoutError:
-                    logger.warning("Listening timed out (No speech detected).")
-                    return None
+            # Force PyAudio to use SpeakerSink.monitor as 'default'
+            original_source = os.environ.get("PULSE_SOURCE")
+            os.environ["PULSE_SOURCE"] = "SpeakerSink.monitor"
+            
+            try:
+                # Re-initialize recognizer to pick up new env var? 
+                # Actually, sr.Microphone() creates PyAudio instance on enter.
+                with sr.Microphone() as source:
+                    logger.info("Listening to SpeakerSink.monitor...")
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    logger.info(f"Energy Threshold: {self.recognizer.energy_threshold}")
+                    
+                    try:
+                        audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
+                        logger.info(f"Audio captured! Size: {len(audio.get_raw_data())} bytes")
+                    except sr.WaitTimeoutError:
+                        logger.warning("Listening timed out (No speech detected).")
+                        return None
+            finally:
+                # Restore environment
+                if original_source:
+                    os.environ["PULSE_SOURCE"] = original_source
+                else:
+                    del os.environ["PULSE_SOURCE"]
 
-                try:
-                    # Using Google STT for lightweight speed 
-                    text = self.recognizer.recognize_google(audio)
-                    logger.info(f"Heard: {text}")
-                    return text
-                except sr.UnknownValueError:
-                    logger.info("STT: Could not understand audio (Unintelligible).")
-                    return None
-                except sr.RequestError as e:
-                    logger.error(f"STT Service Error: {e}")
-                    return None
+            try:
+                # Using Google STT for lightweight speed 
+                text = self.recognizer.recognize_google(audio)
+                logger.info(f"Heard: {text}")
+                return text
+            except sr.UnknownValueError:
+                logger.info("STT: Could not understand audio (Unintelligible).")
+                return None
+            except sr.RequestError as e:
+                logger.error(f"STT Service Error: {e}")
+                return None
         except Exception as e:
             logger.error(f"Mic Error: {e}")
             return None

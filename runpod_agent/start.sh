@@ -58,10 +58,14 @@ pactl set-default-sink SpeakerSink
 pactl load-module module-null-sink sink_name=MicSink sink_properties=device.description=Microphone_Sink
 pactl load-module module-virtual-source source_name=MicSource master=MicSink.monitor source_properties=device.description=Microphone_Source
 
-# Set Default Source to SPEAKER MONITOR (so Agent listens to Meeting)
-# NOTE: Zoom might default to this too, causing feedback. 
-# We rely on Zoom picking "Microphone_Source" intelligently or manual selection.
-pactl set-default-source SpeakerSink.monitor
+# B. Create MicSink (Zoom Input)
+# Agent will play 'mpg123' here.
+# Chrome will listen to MicSink.monitor (Default Source).
+pactl load-module module-null-sink sink_name=MicSink sink_properties=device.description=Microphone_Sink
+pactl load-module module-virtual-source source_name=MicSource master=MicSink.monitor source_properties=device.description=Microphone_Source
+
+# Set Default Source to MicSource (so Chrome uses Agent Voice, preventing echo)
+pactl set-default-source MicSource
 
 # Unmute everything just in case
 pactl set-sink-mute SpeakerSink 0
