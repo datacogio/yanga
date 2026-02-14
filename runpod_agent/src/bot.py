@@ -100,21 +100,8 @@ class ZoomBot:
         self.status = "IDLE"
         self.recognizer = sr.Recognizer()
         self.is_listening = False
-        self.mic_index = None
-
-        # Audio Setup: Find 'SpeakerSink.monitor'
-        try:
-            mics = sr.Microphone.list_microphone_names()
-            logger.info(f"Available Microphones: {mics}")
-            for i, mic_name in enumerate(mics):
-                if "SpeakerSink" in mic_name and "monitor" in mic_name:
-                    self.mic_index = i
-                    logger.info(f"Selected Mic: {mic_name} (Index {i})")
-                    break
-            if self.mic_index is None:
-                logger.warning("SpeakerSink.monitor not found! Using default.")
-        except Exception as e:
-            logger.error(f"Failed to list microphones: {e}")
+        # Use default mic (which start.sh sets to SpeakerSink.monitor)
+        self.mic_index = None 
 
     def start_browser(self):
         """Initializes the Selenium Chrome Driver with Audio support."""
@@ -151,10 +138,10 @@ class ZoomBot:
             logger.error(f"TTS Error: {e}")
 
     def listen(self):
-        """Listens for audio input via PulseAudio Virtual Source."""
+        """Listens for audio input via PulseAudio Default Source (SpeakerSink.monitor)."""
         try:
-            # Use specific device index (SpeakerSink.monitor)
-            with sr.Microphone(device_index=self.mic_index) as source:
+            # Use default device (index None)
+            with sr.Microphone() as source:
                 logger.info("Listening...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
@@ -170,7 +157,7 @@ class ZoomBot:
                     logger.error(f"STT Error: {e}")
                     return None
         except Exception as e:
-            # logger.error(f"Mic Error: {e}")
+            logger.error(f"Mic Error: {e}")
             return None
 
     def start_conversation_loop(self):
