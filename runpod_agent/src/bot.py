@@ -5,10 +5,13 @@ import requests
 import json
 import time
 import os
-from gtts import gTTS
+import os
+# from gtts import gTTS (Removed, using tts_manager)
 import speech_recognition as sr
 import threading
 from src.memory import MemoryManager
+from src.tts import tts_instance
+from src.config import config_instance
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -129,13 +132,16 @@ class ZoomBot:
             self.status = "ERROR"
 
     def speak(self, text):
-        """Uses gTTS to generate speech and plays it via mpg123 into MicSink."""
+        """Uses TTSManager to generate speech and plays it via mpg123 into MicSink."""
         try:
             logger.info(f"Speaking: {text}")
-            tts = gTTS(text=text, lang='en')
-            tts.save("/tmp/speech.mp3")
-            # Play to MicSink so Zoom hears it
-            os.system("PULSE_SINK=MicSink mpg123 -q /tmp/speech.mp3") 
+            
+            # Generate Audio File
+            success = tts_instance.speak(text, "/tmp/speech.mp3")
+            
+            if success:
+                # Play to MicSink so Zoom hears it
+                os.system("PULSE_SINK=MicSink mpg123 -q /tmp/speech.mp3") 
         except Exception as e:
             logger.error(f"TTS Error: {e}")
 
@@ -418,6 +424,10 @@ RESPONSE (Brief and natural):"""
 
     def get_status(self):
         return {"status": self.status, "listening": self.is_listening}
+
+    def reload_config(self):
+        config_instance.load_config()
+        logger.info("Bot configuration reloaded.")
 
 # Instantiate Global Bot
 bot_instance = ZoomBot()
