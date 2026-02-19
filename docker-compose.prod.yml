@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  agent:
+    image: yanga4/zoom-agent:latest
+    container_name: zoom_agent
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_HOST=localhost:11434
+      - TTS_API_URL=http://chatterbox:8000/v1
+    ports:
+      - "8000:8000"
+      - "6080:6080"
+      - "5900:5900"
+    volumes:
+      - ./workspace:/workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    networks:
+      - agent_network
+    depends_on:
+      - chatterbox
+
+  chatterbox:
+    image: ghcr.io/chatterbox-ai/chatterbox-turbo:latest
+    container_name: chatterbox
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    networks:
+      - agent_network
+
+networks:
+  agent_network:
+    driver: bridge
