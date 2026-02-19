@@ -8,6 +8,7 @@ import os
 from gtts import gTTS
 import speech_recognition as sr
 import threading
+from src.memory import MemoryManager
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -102,6 +103,7 @@ class ZoomBot:
         self.is_listening = False
         # Use default mic (which start.sh sets to SpeakerSink.monitor)
         self.mic_index = None 
+        self.memory = MemoryManager() 
 
     def start_browser(self):
         """Initializes the Selenium Chrome Driver with Audio support."""
@@ -169,6 +171,7 @@ class ZoomBot:
                 # Using Google STT for lightweight speed 
                 text = self.recognizer.recognize_google(audio)
                 logger.info(f"Heard: {text}")
+                self.memory.add_entry("User", text)
                 return text
             except sr.UnknownValueError:
                 logger.info("STT: Could not understand audio (Unintelligible).")
@@ -206,7 +209,17 @@ class ZoomBot:
 
     def ask_llm(self, text):
         """Sends text to Ollama for a chat response."""
-        prompt = f"You are a helpful AI assistant in a Zoom meeting. User said: '{text}'. Respond briefly and naturally."
+        context = self.memory.get_recent_context(limit=10)
+        
+        prompt = f"""You are a helpful AI assistant in a Zoom meeting.
+        
+CONTEXT (Recent Conversation):
+{context}
+
+CURRENT INPUT: {text}
+
+RESPONSE (Brief and natural):"""
+
         payload = {
             "model": CHAT_MODEL,
             "prompt": prompt,
@@ -215,7 +228,9 @@ class ZoomBot:
         try:
             resp = requests.post(OLLAMA_URL, json=payload, timeout=20)
             if resp.status_code == 200:
-                return resp.json().get("response", "").strip()
+                response = resp.json().get("response", "").strip()
+                self.memory.add_entry("Agent", response)
+                return response
         except Exception as e:
             logger.error(f"LLM Error: {e}")
         return "I didn't quite catch that."
@@ -248,6 +263,7 @@ class ZoomBot:
 
         try:
             logger.info(f"Navigating: {join_url}")
+            self.memory.start_session(join_url)
             self.speak(f"Navigating to Zoom meeting.")
             
             # Try efficient URL first
@@ -393,6 +409,7 @@ class ZoomBot:
 
     def leave_meeting(self):
         self.is_listening = False # Stop loop
+        self.memory.end_session()
         if self.driver:
             self.driver.quit()
             self.driver = None
