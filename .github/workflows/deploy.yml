@@ -30,7 +30,5 @@ jobs:
           context: ./runpod_agent
           file: ./runpod_agent/Dockerfile
           push: true
-          tags: |
-            yanga4/zoom-agent:latest
-            yanga4/zoom-agent:${{ github.sha }}
+          tags: yanga4/zoom-agent:latest
           platforms: linux/amd64
